@@ -627,6 +627,39 @@ out:
 	return res;
 }
 
+static gboolean unlock_nor_flash_slot(const gchar *device, GError **error)
+{
+	g_autoptr(GSubprocess) sproc = NULL;
+	GError *ierror = NULL;
+	gboolean res = FALSE;
+	g_autoptr(GPtrArray) args = g_ptr_array_new_full(5, g_free);
+
+	g_ptr_array_add(args, g_strdup("flash_unlock"));
+	g_ptr_array_add(args, g_strdup(device));
+	g_ptr_array_add(args, NULL);
+
+	sproc = r_subprocess_newv(args, G_SUBPROCESS_FLAGS_NONE, &ierror);
+	if (sproc == NULL) {
+		g_propagate_prefixed_error(
+				error,
+				ierror,
+				"failed to start flash_unlock: ");
+		goto out;
+	}
+
+	res = g_subprocess_wait_check(sproc, NULL, &ierror);
+	if (!res) {
+		g_propagate_prefixed_error(
+				error,
+				ierror,
+				"failed to run flash_unlock: ");
+		goto out;
+	}
+
+out:
+	return res;
+}
+
 static gboolean nor_write_slot(const gchar *image, const gchar *device, GError **error)
 {
 	g_autoptr(GSubprocess) sproc = NULL;
@@ -1290,6 +1323,14 @@ static gboolean img_to_nor_handler(RaucImage *image, RaucSlot *dest_slot, const 
 			g_propagate_error(error, ierror);
 			goto out;
 		}
+	}
+
+	/* unlock flash */
+	g_message("unlocking flash device %s", dest_slot->device);
+	res = unlock_nor_flash_slot(dest_slot->device, &ierror);
+	if (!res) {
+		g_propagate_error(error, ierror);
+		goto out;
 	}
 
 	/* erase */
